@@ -361,6 +361,21 @@ const ThreeJSViewerComponent: React.FC<ViewerPluginProps> = ({
                 // time, so a model added later still picks it up.
                 sceneEnvironmentRef.current = applySceneEnvironment(THREE, scene, renderer);
 
+                // Stash the renderer immediately. Cleanup only disposed through viewerInstanceRef,
+                // which used to be set after every file loaded — so a failed or cancelled load left
+                // the WebGL context alive (and, on a later failed run, disposed the previous scene
+                // twice while leaking this one). Partial state is enough for cleanup; fileGroups /
+                // controls / handlers are filled in once the scene is ready.
+                viewerInstanceRef.current = {
+                    scene,
+                    camera,
+                    renderer,
+                    fileGroups: [],
+                    controls: null,
+                    clickHandler: null,
+                    blobUrls: [],
+                };
+
                 const filesToLoad =
                     multiFileKeys && multiFileKeys.length > 0
                         ? multiFileKeys
@@ -460,6 +475,9 @@ const ThreeJSViewerComponent: React.FC<ViewerPluginProps> = ({
                             );
                             arrayBuffer = depResult.gltfArrayBuffer;
                             allBlobUrls.push(...depResult.blobUrls);
+                            if (viewerInstanceRef.current) {
+                                viewerInstanceRef.current.blobUrls = allBlobUrls;
+                            }
 
                             // Track dependency count for this file
                             const depCount = depResult.blobUrls.length;
@@ -799,6 +817,8 @@ const ThreeJSViewerComponent: React.FC<ViewerPluginProps> = ({
                     console.log(`Cleaned up ${blobUrls.length} blob URLs`);
                 }
             }
+
+            viewerInstanceRef.current = null;
 
             // Clear global THREE.js reference to prevent contamination
             delete (window as any).THREE;
